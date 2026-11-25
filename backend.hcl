@@ -1,4 +1,4 @@
-bucket       = "demoeks-tfstate-demo-bucket"
+bucket       = "aws-terraform-eks-3245"
 key          = "eks/terraform.tfstate"
 region       = "us-east-1"
 encrypt      = true
