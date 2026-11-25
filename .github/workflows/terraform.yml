@@ -1,0 +1,198 @@
+name: Terraform EKS
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [prod]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action"
+        type: choice
+        default: plan
+        options: [plan, apply, destroy]
+      confirm_destroy:
+        description: "To destroy, type the cluster name exactly (demoeks)"
+        type: string
+        default: "no"
+
+permissions:
+  id-token: write # OIDC login to AWS, no stored access keys
+  contents: read
+
+# One Terraform run at a time (like lockBehavior: sequential).
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_VERSION: "1.16.3"
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  CLUSTER_NAME: demoeks
+
+jobs:
+  #############################################################################
+  # Validate -- no AWS access, runs on every push and PR
+  #############################################################################
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  #############################################################################
+  # Plan -- makes a destroy plan when action = destroy, so you see exactly
+  # what will be deleted before approving
+  #############################################################################
+  plan:
+    name: Plan
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Terraform plan
+        run: |
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            terraform plan -destroy -out=tfplan -input=false -lock-timeout=10m
+          else
+            terraform plan -out=tfplan -input=false -lock-timeout=10m
+          fi
+
+      - name: Show plan
+        run: terraform show -no-color tfplan | tee plan.txt
+
+      - name: Add plan to job summary
+        run: |
+          {
+            echo '### Terraform plan'
+            echo '```'
+            cat plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Lock file goes with the plan so apply uses identical provider versions.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: |
+            tfplan
+            .terraform.lock.hcl
+          retention-days: 5
+
+  #############################################################################
+  # Apply -- manual run with action = apply, prod branch only
+  #############################################################################
+  apply:
+    name: Apply
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply' && github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      # Applies the reviewed plan, not a fresh one. Fails if state moved since
+      # the plan was made -- that is the point.
+      - name: Terraform apply
+        run: terraform apply -input=false -lock-timeout=10m tfplan
+
+  #############################################################################
+  # Destroy -- manual run with action = destroy, prod only, typed confirmation
+  #############################################################################
+  destroy:
+    name: Destroy
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy' && github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Confirm destroy intent
+        env:
+          SUPPLIED: ${{ inputs.confirm_destroy }}
+        run: |
+          if [ "$SUPPLIED" != "$CLUSTER_NAME" ]; then
+            echo "Confirmation did not match. Re-run and type the cluster name exactly to destroy."
+            exit 1
+          fi
+          echo "Confirmed."
+
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Kubernetes-created load balancers aren't in Terraform state.
+      # Delete them while the cluster still exists, or the VPC can't be removed.
+      - name: Remove Kubernetes load balancers before destroy
+        run: |
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>&1; then
+            aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+            kubectl delete ingress --all -A --wait=true || true
+            kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' |
+              while read ns name; do kubectl delete svc "$name" -n "$ns" --wait=true; done
+            sleep 60
+          else
+            echo "Cluster not found, nothing to clean up."
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      # Applying a saved destroy plan -- the plan file carries the destroy intent.
+      - name: Terraform destroy
+        run: terraform apply -input=false -lock-timeout=10m tfplan

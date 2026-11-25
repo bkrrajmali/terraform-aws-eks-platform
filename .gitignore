@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+crash.log
+*.tfvars.json
+override.tf
+override.tf.json
+./github/workflows/oidc-debug*
