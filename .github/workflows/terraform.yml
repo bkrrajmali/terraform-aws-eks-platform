@@ -21,7 +21,6 @@ permissions:
   id-token: write # OIDC login to AWS, no stored access keys
   contents: read
 
-# One Terraform run at a time (like lockBehavior: sequential).
 concurrency:
   group: terraform-${{ github.ref }}
   cancel-in-progress: false
@@ -47,13 +46,13 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform fmt
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -recursive -diff
 
       - name: Terraform init (no backend)
-        run: terraform init -backend=false -input=false
+        run: terraform init -backend=false -input=false -no-color
 
       - name: Terraform validate
-        run: terraform validate
+        run: terraform validate -no-color
 
   #############################################################################
   # Plan -- makes a destroy plan when action = destroy, so you see exactly
@@ -77,14 +76,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform init
-        run: terraform init -input=false -backend-config=backend.hcl
+        run: terraform init -input=false -no-color -backend-config=backend.hcl
 
       - name: Terraform plan
         run: |
           if [ "${{ inputs.action }}" = "destroy" ]; then
-            terraform plan -destroy -out=tfplan -input=false -lock-timeout=10m
+            terraform plan -destroy -out=tfplan -input=false -no-color -lock-timeout=10m
           else
-            terraform plan -out=tfplan -input=false -lock-timeout=10m
+            terraform plan -out=tfplan -input=false -no-color -lock-timeout=10m
           fi
 
       - name: Show plan
@@ -134,12 +133,12 @@ jobs:
           name: tfplan
 
       - name: Terraform init
-        run: terraform init -input=false -backend-config=backend.hcl
+        run: terraform init -input=false -no-color -backend-config=backend.hcl
 
       # Applies the reviewed plan, not a fresh one. Fails if state moved since
       # the plan was made -- that is the point.
       - name: Terraform apply
-        run: terraform apply -input=false -lock-timeout=10m tfplan
+        run: terraform apply -input=false -no-color -lock-timeout=10m tfplan
 
   #############################################################################
   # Destroy -- manual run with action = destroy, prod only, typed confirmation
@@ -191,8 +190,8 @@ jobs:
           name: tfplan
 
       - name: Terraform init
-        run: terraform init -input=false -backend-config=backend.hcl
+        run: terraform init -input=false -no-color -backend-config=backend.hcl
 
       # Applying a saved destroy plan -- the plan file carries the destroy intent.
       - name: Terraform destroy
-        run: terraform apply -input=false -lock-timeout=10m tfplan
+        run: terraform apply -input=false -no-color -lock-timeout=10m tfplan

@@ -6,7 +6,7 @@ tags = {
 ecr_repository_name = "demoeks"
 
 cluster_name       = "demoeks"
-kubernetes_version = "1.38"
+kubernetes_version = "1.37"
 enable_oidc        = true
 
 # Add your own IAM user/role ARN here so you can run kubectl.
