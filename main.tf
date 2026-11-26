@@ -3,7 +3,7 @@ data "aws_availability_zones" "available" {
 }
 
 module "vpc" {
-  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/vpc?ref=main"
+  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/vpc?ref=prod"
 
   vpc_name        = var.vpc_name
   vpc_cidr        = var.vpc_cidr
@@ -14,14 +14,14 @@ module "vpc" {
 }
 
 module "ecr" {
-  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/ecr?ref=main"
+  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/ecr?ref=prod"
 
   name = var.ecr_repository_name
   tags = var.tags
 }
 
 module "eks" {
-  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/eks?ref=main"
+  source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/eks?ref=prod"
 
   cluster_name            = var.cluster_name
   kubernetes_version      = var.kubernetes_version
