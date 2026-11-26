@@ -8,7 +8,7 @@ ecr_repository_name = "demoeks"
 cluster_name = "demoeks"
 
 # Control plane version. Upgrade ONE minor version at a time (1.35 -> 1.36 -> 1.37).
-kubernetes_version = "1.35"
+kubernetes_version = "1.36"
 
 # Worker node version. Same as the control plane, or up to 2 behind it.
 # Can jump straight to the target once the control plane is there (1.35 -> 1.37).
