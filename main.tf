@@ -23,9 +23,10 @@ module "ecr" {
 module "eks" {
   source = "git::https://github.com/bkrrajmali/aws-eks-modules.git//modules/eks?ref=prod"
 
-  cluster_name       = var.cluster_name
-  kubernetes_version = var.kubernetes_version
-  subnet_ids         = module.vpc.private_subnet_ids
+  cluster_name            = var.cluster_name
+  kubernetes_version      = var.kubernetes_version
+  node_kubernetes_version = var.node_kubernetes_version
+  subnet_ids              = module.vpc.private_subnet_ids
 
   system_node_group = var.system_node_group
   user_node_group   = var.user_node_group
@@ -35,4 +36,3 @@ module "eks" {
 
   tags = var.tags
 }
-
