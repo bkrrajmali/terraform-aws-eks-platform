@@ -12,7 +12,7 @@ kubernetes_version = "1.37"
 
 # Worker node version. Same as the control plane, or up to 2 behind it.
 # Can jump straight to the target once the control plane is there (1.35 -> 1.37).
-node_kubernetes_version = "1.35"
+node_kubernetes_version = "1.37"
 
 enable_oidc = true
 
