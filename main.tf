@@ -1,8 +1,3 @@
-###############################################################################
-# Modules live in github.com/bkrrajmali/aws-eks-modules
-# (same pattern as TerraformAKS -> azure-aks-modules)
-###############################################################################
-
 data "aws_availability_zones" "available" {
   state = "available"
 }
@@ -41,4 +36,3 @@ module "eks" {
 
   tags = var.tags
 }
-
