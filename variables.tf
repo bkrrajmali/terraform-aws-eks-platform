@@ -60,6 +60,20 @@ variable "kubernetes_version" {
   type        = string
 }
 
+variable "node_kubernetes_version" {
+  description = "Worker node version. Same as kubernetes_version, or up to 2 minor versions behind it during an upgrade. Never newer."
+  type        = string
+
+  validation {
+    condition = (
+      split(".", var.node_kubernetes_version)[0] == split(".", var.kubernetes_version)[0] &&
+      tonumber(split(".", var.kubernetes_version)[1]) - tonumber(split(".", var.node_kubernetes_version)[1]) >= 0 &&
+      tonumber(split(".", var.kubernetes_version)[1]) - tonumber(split(".", var.node_kubernetes_version)[1]) <= 2
+    )
+    error_message = "node_kubernetes_version must be the same as kubernetes_version or up to 2 minor versions behind it (e.g. cluster 1.37 -> nodes 1.35, 1.36 or 1.37)."
+  }
+}
+
 variable "enable_oidc" {
   description = "Create the IAM OIDC provider (IRSA, the AWS version of workload identity)."
   type        = bool
